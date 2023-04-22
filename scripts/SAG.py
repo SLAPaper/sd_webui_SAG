@@ -21,6 +21,10 @@ import os
 
 from scripts import xyz_grid_support_sag
 
+import torchvision
+import PIL
+
+
 _ATTN_PRECISION = os.environ.get("ATTN_PRECISION", "fp32")
 def exists(val):
     return val is not None
@@ -137,6 +141,8 @@ current_unet_kwargs = {}
 current_uncond_pred = None
 current_degraded_pred_compensation = None
 
+last_attn_masks = []
+
 def gaussian_blur_2d(img, kernel_size, sigma):
     ksize_half = (kernel_size - 1) * 0.5
 
@@ -234,6 +240,9 @@ class Script(scripts.Script):
         degraded_pred = params.inner_model(renoised_degraded_latent, current_unet_kwargs['sigma'], cond=make_condition_dict([current_unet_kwargs['text_uncond']], [current_unet_kwargs['image_cond']]))
         global current_degraded_pred
         current_degraded_pred = degraded_pred
+        global last_attn_masks
+        last_attn_masks.append(attn_mask)
+        
 
     def cfg_after_cfg_callback(self, params: AfterCFGCallbackParams):
         if not sag_enabled:
@@ -256,6 +265,9 @@ class Script(scripts.Script):
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
         enabled, scale, mask_threshold = args
+        
+        last_attn_masks.clear()
+        
         global sag_enabled, sag_mask_threshold
         if enabled:
 
@@ -291,11 +303,29 @@ class Script(scripts.Script):
 
     def postprocess(self, p, processed, *args):
         enabled, scale, sag_mask_threshold = args
+        
         if enabled:
             # restore original self attention module forward function
             attn_module = shared.sd_model.model.diffusion_model.middle_block._modules['1'].transformer_blocks._modules[
                 '0'].attn1
             attn_module.forward = saved_original_selfattn_forward
-        return
+            
+            # add attention masks
+            for attn_mask in last_attn_masks:
+                B, C, H_lat, W_lat = attn_mask.shape
+                assert C == 4 # same as channels of U-Net output (each channel has same value)
+                attn_mask = attn_mask[:, 0, :, :] # (B,H,W)
+                for b in range(B):
+                    base_image = processed.images[processed.index_of_first_image + b]
+                    mask = attn_mask[b, :, :]
+                    mask = torch.clamp((mask * 255), 0, 255).to(torch.uint8)
+                    mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(base_image.height, base_image.width), mode='nearest')
+                    
+                    mask_image = torchvision.transforms.ToPILImage('L')(mask.squeeze()).convert('RGB')
+                    image = PIL.Image.blend(base_image, mask_image, 0.5)
+                    
+                    processed.images.append(image)
+        
+        last_attn_masks.clear()
 
 xyz_grid_support_sag.initialize(Script)
