@@ -258,13 +258,14 @@ class Script(scripts.Script):
             enabled = gr.Checkbox(label="Enabled", default=False)
             scale = gr.Slider(label='Scale', minimum=-2.0, maximum=10.0, step=0.01, value=0.75)
             mask_threshold = gr.Slider(label='SAG Mask Threshold', minimum=0.0, maximum=2.0, step=0.01, value=1.0)
+            show_simmap = gr.Checkbox(value=False, label='Show attention map.')
 
-        return [enabled, scale, mask_threshold]
+        return [enabled, scale, mask_threshold, show_simmap]
 
 
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
-        enabled, scale, mask_threshold = args
+        enabled, scale, mask_threshold, *rest = args
         
         last_attn_masks.clear()
         
@@ -302,7 +303,7 @@ class Script(scripts.Script):
         return
 
     def postprocess(self, p, processed, *args):
-        enabled, scale, sag_mask_threshold = args
+        enabled, scale, sag_mask_threshold, show_simmap, *rest = args
         
         if enabled:
             # restore original self attention module forward function
@@ -311,20 +312,21 @@ class Script(scripts.Script):
             attn_module.forward = saved_original_selfattn_forward
             
             # add attention masks
-            for attn_mask in last_attn_masks:
-                B, C, H_lat, W_lat = attn_mask.shape
-                assert C == 4 # same as channels of U-Net output (each channel has same value)
-                attn_mask = attn_mask[:, 0, :, :] # (B,H,W)
-                for b in range(B):
-                    base_image = processed.images[processed.index_of_first_image + b]
-                    mask = attn_mask[b, :, :]
-                    mask = torch.clamp((mask * 255), 0, 255).to(torch.uint8)
-                    mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(base_image.height, base_image.width), mode='nearest')
-                    
-                    mask_image = torchvision.transforms.ToPILImage('L')(mask.squeeze()).convert('RGB')
-                    image = PIL.Image.blend(base_image, mask_image, 0.5)
-                    
-                    processed.images.append(image)
+            if show_simmap:
+                for attn_mask in last_attn_masks:
+                    B, C, H_lat, W_lat = attn_mask.shape
+                    assert C == 4 # same as channels of U-Net output (each channel has same value)
+                    attn_mask = attn_mask[:, 0, :, :] # (B,H,W)
+                    for b in range(B):
+                        base_image = processed.images[processed.index_of_first_image + b]
+                        mask = attn_mask[b, :, :]
+                        mask = torch.clamp((mask * 255), 0, 255).to(torch.uint8)
+                        mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(base_image.height, base_image.width), mode='nearest')
+                        
+                        mask_image = torchvision.transforms.ToPILImage('L')(mask.squeeze()).convert('RGB')
+                        image = PIL.Image.blend(base_image, mask_image, 0.5)
+                        
+                        processed.images.append(image)
         
         last_attn_masks.clear()
 
