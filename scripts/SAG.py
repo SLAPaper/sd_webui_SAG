@@ -132,6 +132,8 @@ current_selfattn_map = None
 current_sag_guidance_scale = 1.0
 sag_enabled = False
 sag_mask_threshold = 1.0
+sag_mask_threshold_auto = False
+last_sag_mask_thresholds = []
 
 current_xin = None
 current_outsize = (64,64)
@@ -215,7 +217,11 @@ class Script(scripts.Script):
         middle_layer_latent_size = [math.ceil(latent_h/8), math.ceil(latent_w/8)]
 
         attn_map = attn_map.reshape(b, h, hw1, hw2)
-        attn_mask = attn_map.mean(1, keepdim=False).sum(1, keepdim=False) > sag_mask_threshold
+        attn_map_gap = attn_map.mean(1, keepdim=False).sum(1, keepdim=False)
+        mask_threshold = sag_mask_threshold
+        if sag_mask_threshold_auto:
+            mask_threshold = attn_map_gap.mean().item() * sag_mask_threshold
+        attn_mask = attn_map_gap > mask_threshold
         attn_mask = (
             attn_mask.reshape(b, middle_layer_latent_size[0], middle_layer_latent_size[1])
             .unsqueeze(1)
@@ -242,6 +248,8 @@ class Script(scripts.Script):
         current_degraded_pred = degraded_pred
         global last_attn_masks
         last_attn_masks.append(attn_mask)
+        global last_sag_mask_thresholds
+        last_sag_mask_thresholds.append(mask_threshold)
         
 
     def cfg_after_cfg_callback(self, params: AfterCFGCallbackParams):
@@ -257,23 +265,26 @@ class Script(scripts.Script):
         with gr.Accordion('Self Attention Guidance', open=False):
             enabled = gr.Checkbox(label="Enabled", default=False)
             scale = gr.Slider(label='Scale', minimum=-2.0, maximum=10.0, step=0.01, value=0.75)
+            auto_th = gr.Checkbox(value=False, label='Auto threshold')
             mask_threshold = gr.Slider(label='SAG Mask Threshold', minimum=0.0, maximum=2.0, step=0.01, value=1.0)
             show_simmap = gr.Checkbox(value=False, label='Show attention map.')
 
-        return [enabled, scale, mask_threshold, show_simmap]
+        return [enabled, scale, mask_threshold, show_simmap, auto_th]
 
 
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
-        enabled, scale, mask_threshold, *rest = args
+        enabled, scale, mask_threshold, show_simmap, auto_th = args
         
         last_attn_masks.clear()
+        last_sag_mask_thresholds.clear()
         
-        global sag_enabled, sag_mask_threshold
+        global sag_enabled, sag_mask_threshold, sag_mask_threshold_auto
         if enabled:
 
             sag_enabled = True
             sag_mask_threshold = mask_threshold
+            sag_mask_threshold_auto = auto_th
             global current_sag_guidance_scale
             current_sag_guidance_scale = scale
             global saved_original_selfattn_forward
@@ -303,7 +314,7 @@ class Script(scripts.Script):
         return
 
     def postprocess(self, p, processed, *args):
-        enabled, scale, sag_mask_threshold, show_simmap, *rest = args
+        enabled, scale, sag_mask_threshold, show_simmap, auto_th, *rest = args
         
         if enabled:
             # restore original self attention module forward function
@@ -328,6 +339,12 @@ class Script(scripts.Script):
                         
                         processed.images.append(image)
         
+        if auto_th:
+            print('SAG mask threshold:')
+            for step, last_sag_mask_threshold in enumerate(last_sag_mask_thresholds, 1):
+                print(f'  step={step}: {last_sag_mask_threshold}')
+        
         last_attn_masks.clear()
+        last_sag_mask_thresholds.clear()
 
 xyz_grid_support_sag.initialize(Script)
