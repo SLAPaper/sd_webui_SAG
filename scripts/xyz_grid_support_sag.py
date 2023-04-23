@@ -60,6 +60,14 @@ def apply_sag_mask_threshold(p, x, xs):
     update_script_args(p, x, 0)
     update_script_args(p, x, 2)# sag_mask_threshold
 
+def apply_sag_blur_kernel_size(p, x, xs):
+    update_script_args(p, True, 0)
+    update_script_args(p, x, 5)# blur_size
+
+def apply_sag_blur_sigma(p, x, xs):
+    update_script_args(p, True, 0)
+    update_script_args(p, x, 6)# blur_sigma
+
 
 
 
@@ -72,5 +80,7 @@ def initialize(script):
             xy_grid = scriptDataTuple.module
             sag_guidance_scale = xy_grid.AxisOption("SAG Guidance Scale", float, lambda p, x, xs: apply_sag_guidance_scale(p,x,xs), xy_grid.format_value_add_label, None, cost=0.5)
             sag_mask_threshold = xy_grid.AxisOption("SAG Mask Threshold", float, lambda p, x, xs: apply_sag_mask_threshold(p,x,xs), xy_grid.format_value_add_label, None, cost=0.5)
-            xy_grid.axis_options.extend([sag_guidance_scale, sag_mask_threshold])
+            sag_blur_kernel_size = xy_grid.AxisOption("SAG Blur Kernel Size", float, lambda p, x, xs: apply_sag_blur_kernel_size(p,x,xs), xy_grid.format_value_add_label, None, cost=0.5)
+            sag_blur_sigma = xy_grid.AxisOption("SAG Blur Sigma", float, lambda p, x, xs: apply_sag_blur_sigma(p,x,xs), xy_grid.format_value_add_label, None, cost=0.5)
+            xy_grid.axis_options.extend([sag_guidance_scale, sag_mask_threshold, sag_blur_kernel_size, sag_blur_sigma])
 

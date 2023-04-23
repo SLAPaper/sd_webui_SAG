@@ -145,6 +145,10 @@ current_degraded_pred_compensation = None
 
 last_attn_masks = []
 
+# blur setting
+blur_kernel_size = 9
+blur_sigma = 1.0
+
 def gaussian_blur_2d(img, kernel_size, sigma):
     ksize_half = (kernel_size - 1) * 0.5
 
@@ -231,7 +235,7 @@ class Script(scripts.Script):
         attn_mask = F.interpolate(attn_mask, (latent_h, latent_w))
 
         # Blur according to the self-attention mask
-        degraded_latents = gaussian_blur_2d(original_latents, kernel_size=9, sigma=1.0)
+        degraded_latents = gaussian_blur_2d(original_latents, kernel_size=blur_kernel_size, sigma=blur_sigma)
         degraded_latents = degraded_latents * attn_mask + original_latents * (1 - attn_mask)
 
         renoised_degraded_latent = degraded_latents - (uncond_output - current_xin)
@@ -267,24 +271,31 @@ class Script(scripts.Script):
             scale = gr.Slider(label='Scale', minimum=-2.0, maximum=10.0, step=0.01, value=0.75)
             auto_th = gr.Checkbox(value=False, label='Auto threshold')
             mask_threshold = gr.Slider(label='SAG Mask Threshold', minimum=0.0, maximum=2.0, step=0.01, value=1.0)
+            with gr.Row():
+                blur_size = gr.Slider(label='Blur kernel size', minimum=1, maximum=33, step=2, value=9)
+                blur_sigma = gr.Slider(label='Blur sigma', minimum=0.0, maximum=32.0, step=0.01, value=1.0)
             show_simmap = gr.Checkbox(value=False, label='Show attention map.')
 
-        return [enabled, scale, mask_threshold, show_simmap, auto_th]
+        return [enabled, scale, mask_threshold, show_simmap, auto_th, blur_size, blur_sigma]
 
 
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
-        enabled, scale, mask_threshold, show_simmap, auto_th = args
+        enabled, scale, mask_threshold, show_simmap, auto_th, blur_size, blur_sigma_, *rest = args
         
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
         
         global sag_enabled, sag_mask_threshold, sag_mask_threshold_auto
+        global blur_kernel_size, blur_sigma
         if enabled:
 
             sag_enabled = True
             sag_mask_threshold = mask_threshold
             sag_mask_threshold_auto = auto_th
+            blur_kernel_size = int(blur_size)
+            blur_sigma = float(blur_sigma_)
+            
             global current_sag_guidance_scale
             current_sag_guidance_scale = scale
             global saved_original_selfattn_forward
