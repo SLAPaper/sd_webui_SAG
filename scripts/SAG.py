@@ -1,4 +1,3 @@
-
 from inspect import isfunction
 import torch
 from torch import nn, einsum
@@ -87,13 +86,44 @@ class LoggedSelfAttention(nn.Module):
         out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
         return self.to_out(out)
 
-def xattn_forward_log(self, x, context=None, mask=None):
+
+def xattn_forward_log(
+    self,
+    x,
+    context=None,
+    mask=None,
+    additional_tokens=None,
+    n_times_crossframe_attn_in_self=0,
+):
     h = self.heads
 
+    if additional_tokens is not None:
+        # get the number of masked tokens at the beginning of the output sequence
+        n_tokens_to_mask = additional_tokens.shape[1]
+        # add additional token
+        x = torch.cat([additional_tokens, x], dim=1)
+
+
+        if additional_tokens is not None:
+            # get the number of masked tokens at the beginning of the output sequence
+            n_tokens_to_mask = additional_tokens.shape[1]
+            # add additional token
+            x = torch.cat([additional_tokens, x], dim=1)
     q = self.to_q(x)
     context = default(context, x)
     k = self.to_k(context)
     v = self.to_v(context)
+
+    if n_times_crossframe_attn_in_self:
+        # reprogramming cross-frame attention as in https://arxiv.org/abs/2303.13439
+        assert x.shape[0] % n_times_crossframe_attn_in_self == 0
+        n_cp = x.shape[0] // n_times_crossframe_attn_in_self
+        k = repeat(
+            k[::n_times_crossframe_attn_in_self], "b ... -> (b n) ...", n=n_cp
+        )
+        v = repeat(
+            v[::n_times_crossframe_attn_in_self], "b ... -> (b n) ...", n=n_cp
+        )
 
     q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=h), (q, k, v))
 
@@ -122,6 +152,9 @@ def xattn_forward_log(self, x, context=None, mask=None):
 
     out = einsum('b i j, b j d -> b i d', sim, v)
     out = rearrange(out, '(b h) n d -> b n (h d)', h=h)
+    if additional_tokens is not None:
+        # remove additional token
+        out = out[:, n_tokens_to_mask:]
     out = self.to_out(out)
     global current_outsize
     current_outsize = out.shape[-2:]
@@ -254,7 +287,7 @@ class Script(scripts.Script):
         last_attn_masks.append(attn_mask)
         global last_sag_mask_thresholds
         last_sag_mask_thresholds.append(mask_threshold)
-        
+
 
     def cfg_after_cfg_callback(self, params: AfterCFGCallbackParams):
         if not sag_enabled:
@@ -282,10 +315,10 @@ class Script(scripts.Script):
 
     def process(self, p: StableDiffusionProcessing, *args, **kwargs):
         enabled, scale, mask_threshold, show_simmap, auto_th, blur_size, blur_sigma_, *rest = args
-        
+
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
-        
+
         global sag_enabled, sag_mask_threshold, sag_mask_threshold_auto
         global blur_kernel_size, blur_sigma
         if enabled:
@@ -295,7 +328,7 @@ class Script(scripts.Script):
             sag_mask_threshold_auto = auto_th
             blur_kernel_size = int(blur_size)
             blur_sigma = float(blur_sigma_)
-            
+
             global current_sag_guidance_scale
             current_sag_guidance_scale = scale
             global saved_original_selfattn_forward
@@ -326,13 +359,13 @@ class Script(scripts.Script):
 
     def postprocess(self, p, processed, *args):
         enabled, scale, sag_mask_threshold, show_simmap, auto_th, *rest = args
-        
+
         if enabled:
             # restore original self attention module forward function
             attn_module = shared.sd_model.model.diffusion_model.middle_block._modules['1'].transformer_blocks._modules[
                 '0'].attn1
             attn_module.forward = saved_original_selfattn_forward
-            
+
             # add attention masks
             if show_simmap:
                 for attn_mask in last_attn_masks:
@@ -344,17 +377,17 @@ class Script(scripts.Script):
                         mask = attn_mask[b, :, :]
                         mask = torch.clamp((mask * 255), 0, 255).to(torch.uint8)
                         mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=(base_image.height, base_image.width), mode='nearest')
-                        
+
                         mask_image = torchvision.transforms.ToPILImage('L')(mask.squeeze()).convert('RGB')
                         image = PIL.Image.blend(base_image, mask_image, 0.5)
-                        
+
                         processed.images.append(image)
-        
+
         if auto_th:
             print('SAG mask threshold:')
             for step, last_sag_mask_threshold in enumerate(last_sag_mask_thresholds, 1):
                 print(f'  step={step}: {last_sag_mask_threshold}')
-        
+
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
 
