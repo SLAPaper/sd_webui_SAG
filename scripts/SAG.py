@@ -259,12 +259,23 @@ class Script(scripts.Script):
         if sag_mask_threshold_auto:
             mask_threshold = attn_map_gap.mean().item() * sag_mask_threshold
         attn_mask = attn_map_gap > mask_threshold
-        attn_mask = (
-            attn_mask.reshape(b, middle_layer_latent_size[0], middle_layer_latent_size[1])
-            .unsqueeze(1)
-            .repeat(1, latent_channel, 1, 1)
-            .type(attn_map.dtype)
-        )
+        try:
+            attn_mask = (
+                attn_mask.reshape(b, middle_layer_latent_size[0], middle_layer_latent_size[1])
+                .unsqueeze(1)
+                .repeat(1, latent_channel, 1, 1)
+                .type(attn_map.dtype)
+            )
+        except Exception:
+            # try support SDXL with one less down sampling
+            middle_layer_latent_size = [math.ceil(latent_h/4), math.ceil(latent_w/4)]
+            attn_mask = (
+                attn_mask.reshape(b, middle_layer_latent_size[0], middle_layer_latent_size[1])
+                .unsqueeze(1)
+                .repeat(1, latent_channel, 1, 1)
+                .type(attn_map.dtype)
+            )
+
         attn_mask = F.interpolate(attn_mask, (latent_h, latent_w))
 
         # Blur according to the self-attention mask
@@ -279,7 +290,10 @@ class Script(scripts.Script):
         if shared.sd_model.model.conditioning_key == "crossattn-adm":
             make_condition_dict = lambda c_crossattn, c_adm: {"c_crossattn": c_crossattn, "c_adm": c_adm}
         else:
-            make_condition_dict = lambda c_crossattn, c_concat: {"c_crossattn": c_crossattn, "c_concat": [c_concat]}
+            if isinstance(current_unet_kwargs['text_uncond'], dict):
+                make_condition_dict = lambda c_crossattn, c_concat: {**c_crossattn[0], "c_concat": [c_concat]}
+            else:
+                make_condition_dict = lambda c_crossattn, c_concat: {"c_crossattn": c_crossattn, "c_concat": [c_concat]}
         degraded_pred = params.inner_model(renoised_degraded_latent, current_unet_kwargs['sigma'], cond=make_condition_dict([current_unet_kwargs['text_uncond']], [current_unet_kwargs['image_cond']]))
         global current_degraded_pred
         current_degraded_pred = degraded_pred
