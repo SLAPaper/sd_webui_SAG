@@ -398,9 +398,7 @@ class Script(scripts.Script):
                         processed.images.append(image)
 
         if auto_th:
-            print('SAG mask threshold:')
-            for step, last_sag_mask_threshold in enumerate(last_sag_mask_thresholds, 1):
-                print(f'  step={step}: {last_sag_mask_threshold}')
+            print('SAG mask threshold:', list(last_sag_mask_thresholds[1:]))
 
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
