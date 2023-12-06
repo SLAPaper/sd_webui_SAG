@@ -480,7 +480,11 @@ class Script(scripts.Script):
                         processed.images.append(image)
 
         if auto_th:
-            print("SAG mask threshold:", list(last_sag_mask_thresholds[1:]), sys.stderr)
+            print(
+                "SAG mask threshold:",
+                list(last_sag_mask_thresholds[1:]),
+                file=sys.stderr,
+            )
 
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
