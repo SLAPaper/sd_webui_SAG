@@ -352,7 +352,7 @@ class Script(scripts.Script):
             current_uncond_pred
             - (current_degraded_pred + current_degraded_pred_compensation)
         ) * float(current_sag_guidance_scale)
-        params.output_altered = True
+        # params.output_altered = True
 
     def ui(self, is_img2img):
         with gr.Accordion("Self Attention Guidance", open=False):
@@ -479,12 +479,12 @@ class Script(scripts.Script):
 
                         processed.images.append(image)
 
-        if auto_th:
-            print(
-                "SAG mask threshold:",
-                list(last_sag_mask_thresholds[1:]),
-                file=sys.stderr,
-            )
+            if auto_th:
+                print(
+                    "SAG mask threshold:",
+                    list(last_sag_mask_thresholds[1:]),
+                    file=sys.stderr,
+                )
 
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
