@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 import typing as tg
 from inspect import isfunction
 
@@ -250,7 +251,7 @@ class Script(scripts.Script):
         # Produce attention mask
         # We're only interested in the last current_batch_size*head_count slices of logged self-attention map
         if current_selfattn_map is None:
-            print("SAG WARNING: no current_selfattn_map, return")
+            print("SAG WARNING: no current_selfattn_map, return", file=sys.stderr)
             return
         attn_map = current_selfattn_map[-current_batch_size * 8 :]
         bh, hw1, hw2 = attn_map.shape
@@ -276,7 +277,12 @@ class Script(scripts.Script):
                 math.ceil(latent_w / 4),
             ]
         else:
-            print("SAG WARNING: unknown attention shape", attn_mask.size(), ", return")
+            print(
+                "SAG WARNING: unknown attention shape",
+                attn_mask.size(),
+                ", return",
+                file=sys.stderr,
+            )
             return
 
         attn_mask = (
@@ -339,7 +345,7 @@ class Script(scripts.Script):
             return
 
         if current_degraded_pred is None:
-            print("SAG WARNING: no current_degraded_pred, return")
+            print("SAG WARNING: no current_degraded_pred, return", file=sys.stderr)
             return
 
         params.x = params.x + (
@@ -474,7 +480,7 @@ class Script(scripts.Script):
                         processed.images.append(image)
 
         if auto_th:
-            print("SAG mask threshold:", list(last_sag_mask_thresholds[1:]))
+            print("SAG mask threshold:", list(last_sag_mask_thresholds[1:]), sys.stderr)
 
         last_attn_masks.clear()
         last_sag_mask_thresholds.clear()
