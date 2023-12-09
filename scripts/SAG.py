@@ -428,6 +428,9 @@ class Script(scripts.Script):
 
             p.extra_generation_params["SAG Guidance Scale"] = scale
             p.extra_generation_params["SAG Mask Threshold"] = mask_threshold
+            p.extra_generation_params["SAG Auto Threshold"] = auto_th
+            p.extra_generation_params["SAG Blur Kernel Size"] = blur_size
+            p.extra_generation_params["SAG Blur Sigma"] = blur_sigma_
 
         else:
             sag_enabled = False
