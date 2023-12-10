@@ -377,6 +377,17 @@ class Script(scripts.Script):
                 )
             show_simmap = gr.Checkbox(value=False, label="Show attention map.")
 
+        self.infotext_fields = [
+            (enabled, "SAG Enabled"),
+            (scale, "SAG Guidance Scale"),
+            (mask_threshold, "SAG Mask Threshold"),
+            (auto_th, "SAG Auto Threshold"),
+            (blur_size, "SAG Blur Kernel Size"),
+            (blur_sigma, "SAG Blur Sigma"),
+        ]
+
+        self.paste_field_names = [f for _, f in self.infotext_fields]
+
         return [
             enabled,
             scale,
@@ -392,11 +403,10 @@ class Script(scripts.Script):
             enabled,
             scale,
             mask_threshold,
-            show_simmap,
+            _,
             auto_th,
             blur_size,
             blur_sigma_,
-            *rest,
         ) = args
 
         last_attn_masks.clear()
@@ -426,6 +436,7 @@ class Script(scripts.Script):
                 org_attn_module, org_attn_module.__class__
             )
 
+            p.extra_generation_params["SAG Enabled"] = enabled
             p.extra_generation_params["SAG Guidance Scale"] = scale
             p.extra_generation_params["SAG Mask Threshold"] = mask_threshold
             p.extra_generation_params["SAG Auto Threshold"] = auto_th
