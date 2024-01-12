@@ -265,22 +265,20 @@ class Script(scripts.Script):
             mask_threshold = attn_map_gap.mean().item() * sag_mask_threshold
         attn_mask: torch.Tensor = attn_map_gap > mask_threshold
 
-        # check if is SDXL with 1 less down sampling
-        if attn_mask.numel() == b * math.ceil(latent_h / 8) * math.ceil(latent_w / 8):
+        # Calculate middle layer size
+        scale = math.ceil(math.sqrt(b * latent_h * latent_w / attn_mask.numel()))
+        if attn_mask.numel() == b * math.ceil(latent_h / scale) * math.ceil(
+            latent_w / scale
+        ):
             middle_layer_latent_size = [
-                math.ceil(latent_h / 8),
-                math.ceil(latent_w / 8),
-            ]
-        elif attn_mask.numel() == b * math.ceil(latent_h / 4) * math.ceil(latent_w / 4):
-            middle_layer_latent_size = [
-                math.ceil(latent_h / 4),
-                math.ceil(latent_w / 4),
+                math.ceil(latent_h / scale),
+                math.ceil(latent_w / scale),
             ]
         else:
             print(
-                "SAG WARNING: unknown attention shape",
-                attn_mask.size(),
-                ", return",
+                "SAG WARNING: unknown attention shape:",
+                f"{attn_mask.shape}, return",
+                f"b: {b}, h: {latent_h}, w: {latent_w}",
                 file=sys.stderr,
             )
             return
