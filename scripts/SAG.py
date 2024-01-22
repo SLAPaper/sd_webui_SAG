@@ -4,11 +4,11 @@ import sys
 import typing as tg
 from inspect import isfunction
 
-import gradio as gr
-import PIL
+import gradio as gr  # type: ignore
+import PIL.Image
 import torch
 import torch.nn.functional as F
-import torchvision
+import torchvision  # type: ignore
 from einops import rearrange, repeat
 from torch import einsum, nn
 
@@ -23,7 +23,7 @@ from modules.script_callbacks import (
     on_cfg_denoised,
     on_cfg_denoiser,
 )
-from scripts import xyz_grid_support_sag
+from scripts import xyz_grid_support_sag  # type: ignore
 
 _ATTN_PRECISION = os.environ.get("ATTN_PRECISION", "fp32")
 
@@ -75,7 +75,7 @@ class LoggedSelfAttention(nn.Module):
 
         # force cast to fp32 to avoid overflowing
         if _ATTN_PRECISION == "fp32":
-            with torch.autocast(enabled=False, device_type="cuda"):
+            with torch.autocast(enabled=False, device_type="cuda"):  # pyright: ignore[reportPrivateImportUsage]
                 q, k = q.float(), k.float()
                 sim = einsum("b i d, b j d -> b i j", q, k) * self.scale
         else:
@@ -132,7 +132,7 @@ def xattn_forward_log(
 
     # force cast to fp32 to avoid overflowing
     if _ATTN_PRECISION == "fp32":
-        with torch.autocast(enabled=False, device_type="cuda"):
+        with torch.autocast(enabled=False, device_type="cuda"):  # pyright: ignore[reportPrivateImportUsage]
             q, k = q.float(), k.float()
             sim = einsum("b i d, b j d -> b i j", q, k) * self.scale
     else:
